@@ -4,11 +4,10 @@ from typing import List, Tuple
 
 CURRENT_YEAR = 2021
 
-# TODO: добавить вычисление рейтинга книги
 
 class Book:
     def __init__(self, authors: List[str], name: str, publishing: str, year: int, pages: int, category: str,
-                 price: float, margin: int = 0, rating: float = 0):
+                 price: float, margin: int = 0, rating: float = -1):
         self.authors = authors
         self.name = name
         self.publishing = publishing
@@ -34,7 +33,7 @@ class Order:
         self.customer = customer
         self.contact = contact
         self.cart = cart
-        self.remain_cart = [i for i in range(len(cart))]
+        self.remain_cart = [(i, 1) for i in range(len(cart))]
 
 
 class OrderPublising:
@@ -62,7 +61,7 @@ class Randomizer:
                                    ('Taylor', 'bestsinger@gmail.com'),
                                    ('Scott', 'scotttt@yahoo.com'),]
         self.min_cnt_order = 1  # минимальное кол-во заказов за один шаг
-        self.max_cnt_order = 5  # максимальное кол-во заказов за один шаг
+        self.max_cnt_order = 3  # максимальное кол-во заказов за один шаг
         return
 
     def rand_delivery_time(self) -> int:
@@ -80,15 +79,20 @@ class Randomizer:
         # случайная книга
         return random.randint(0, self.cnt_books - 1)
 
-    def rand_order(self) -> Order:
+    def rand_order_cart(self) -> Order:
         cnt = self.rand_cnt_book_in_order()
         order = random.sample(self.books, cnt)
-        customer, contact = random.choice(self.customer_n_contact)
         cart = [BookCopies(book, self.rand_cnt_copies()) for book in order]
-        return Order(customer, contact, cart)
+        return cart
 
     def rand_cnt_order(self) -> int:
         return random.randint(self.min_cnt_order, self.max_cnt_order)
+
+    def rand_n_order(self, n) -> List[Order]:
+        customers = random.sample(self.customer_n_contact, n)
+        carts = [self.rand_order_cart() for _ in range(n)]
+        return [Order(cust, contact, cart) for (cust, contact), cart in zip(customers, carts)]
+
 
 
 class BookShop:
@@ -100,12 +104,24 @@ class BookShop:
         self.margin_new_book = margin_new_book
         self.experiment = experiment  # так ли надо?
         self.auth_name2idx_book = {str(bc.book): idx for idx, bc in enumerate(self.books)}
-        self.min_cnt_order_book = 0  # сколько раз заказали наименее популярную книгу (с наименьшим числом заказов)
-        self.max_cnt_order_book = -1  #сколько раз заказали наиболее популярную книгу (с наибольшим числом заказов)
+        self.sell_statistic = {bc.book: 0 for bc in self.books}
+        self.min_sell = 0
+        self.max_sell = -1
+        return
+
+    def update_rating(self):
+        for i, (book, cnt) in enumerate(self.sell_statistic.items()):
+            cnt = self.sell_statistic[book]
+            new_rating = (cnt - self.min_sell) / (self.max_sell - self.min_sell) * 4 + 1
+            self.books[i].book.rating = new_rating
         return
 
     def receive_order(self, new_order: Order):
-        # TODO: добавить вычисление рейтинга книги
+        for bc in new_order.cart:
+            self.sell_statistic[bc.book] += bc.count
+        self.max_sell = max(self.sell_statistic.values())
+        self.min_sell = min(self.sell_statistic.values())
+        self.update_rating()
         self.orders.append(new_order)
         return
 
@@ -117,22 +133,29 @@ class BookShop:
         """
         order_publ = {}
         for order in self.orders:
-            for i, in order.remain_cart:
+            idx_remain_cart = order.remain_cart.copy()
+            for i, need_publ in idx_remain_cart:
                 bc = order.cart[i]
                 idx_book_in_assort = self.auth_name2idx_book[str(bc.book)]
                 book = self.books[idx_book_in_assort].book
                 if bc.count <= self.books[idx_book_in_assort].count:
                     self.books[idx_book_in_assort].count -= bc.count
-                    order.remain_cart.pop(i)
+                    order.remain_cart.remove((i, need_publ))
                     cnt_in_assort = self.books[idx_book_in_assort].count
-                    if cnt_in_assort < self.minimum_cnt_for_order:
+                    if need_publ and cnt_in_assort < self.minimum_cnt_for_order:
                         if book.publishing not in order_publ:
                             order_publ[book.publishing] = defaultdict(int)
                         order_publ[book.publishing][book] += self.minimum_cnt_for_order
-                else:
+
+                        idx = order.remain_cart.index((i, need_publ))
+                        order.remain_cart[idx] = (i, 0)
+                elif need_publ:
                     if book.publishing not in order_publ:
                         order_publ[book.publishing] = defaultdict(int)
                     order_publ[book.publishing][book] += bc.count
+
+                    idx = order.remain_cart.index((i, need_publ))
+                    order.remain_cart[idx] = (i, 0)
             if len(order.remain_cart) == 0:
                 self.experiment.update_done_order(order)
         for publ, orders_to_publ in order_publ.items():
@@ -162,6 +185,7 @@ class Experiment:
         assert len(start_assort) == len(books), f"Wrong length of 'start_assort' = {len(start_assort)}, expected: {len(books)}"
         for book in books:
             book.margin = margin_new_book if book.year == CURRENT_YEAR else margin
+            book.rating = -1
         self.start_book_assort = [BookCopies(book, cnt) for book, cnt in zip(books, start_assort)]
         self.orders_publishing = []
         self.done_orders = []
@@ -170,19 +194,18 @@ class Experiment:
         self.book_shop = None  # сам магазин (класс BookShop)
 
         categories = set([b.category for b in books])
-        sell_statistic = {cat: 0 for cat in categories}
-        self.sell_statistic = OrderedDict(sorted(sell_statistic.items()))
+        self.sell_statistic_cat = OrderedDict({cat: 0 for cat in categories})
         self.cnt_steps = 0
         return
 
     def start(self):
         self.book_shop = BookShop(self.start_book_assort, self.minimum_cnt_for_order, self.margin, self.margin_new_book, self)
-        # дописать
+        return
 
     def make_one_step(self):
         cnt_orders = self.randomizer.rand_cnt_order()
-        for i in range(cnt_orders):
-            self.create_order()
+        self.one_day_pass()
+        self.create_n_order(cnt_orders)
         self.check_orders_publising()
         self.book_shop.try_complete_orders()
         return
@@ -196,14 +219,19 @@ class Experiment:
         while self.cnt_steps < self.simulation_period:
             self.make_step()
 
-    def create_order(self):
-        new_order = self.randomizer.rand_order()
-        self.book_shop.receive_order(new_order)
+    def create_n_order(self, n):
+        new_orders = self.randomizer.rand_n_order(n)
+        for new_order in new_orders:
+            self.book_shop.receive_order(new_order)
         return
 
     def add_order_publishing(self, order: OrderPublising):
         delivery_time = self.randomizer.rand_delivery_time()
         self.orders_publishing.append((delivery_time, order))
+        return
+
+    def one_day_pass(self):
+        self.orders_publishing = [(time-1, orde) for time, orde in self.orders_publishing]
         return
 
     def check_orders_publising(self):
@@ -217,5 +245,5 @@ class Experiment:
     def update_done_order(self, new_done_order: Order):
         self.done_orders.append(new_done_order)
         for bc in new_done_order.cart:
-            self.sell_statistic[bc.book.category] += bc.count
+            self.sell_statistic_cat[bc.book.category] += bc.count
         return

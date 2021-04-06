@@ -3,6 +3,50 @@ from classes import *
 import random
 
 MIN_GEN_CNT, MAX_GEN_CNT = 4, 8
+DEFAULT_FONT = ('Arial', 10)
+
+def create_col(name_col, arg):
+  global DEFAULT_FONT
+  widths = {'Автор': 40, 'Название': 30, 'Кол-во': 12, 'Покупатель': 20, '#': 5, 'Тематика': 25, 'Издат.': 12,
+            'Рейтинг': 12, 'Время': 10}
+  num_rows = 15
+  justification = 'l'
+  if name_col == 'Ассортимент':  # arg - List[BookCopies]
+    headings = ['Автор', 'Название', '#']
+    data = [[', '.join(bc.book.authors), bc.book.name, bc.count] for bc in arg]
+  elif name_col == 'Текущие заказы' or name_col == 'Выполн. заказы':  # arg - List[Order]
+    headings = ['Покупатель', 'Автор', 'Название', '#']
+    data = [[cust, ', '.join(bc.book.authors), bc.book.name, bc.count]
+            for orde in arg for cust, bc in zip([orde.customer] + [''] * (len(orde.cart) - 1), orde.cart)]
+  elif name_col == 'Продажи':  # arg - OrderedDict[(category, cnt)]
+    headings = ['Тематика', '#']
+    data = [[cat, cnt] for cat, cnt in arg.items()]
+  elif name_col == 'Выполн. заявки в издат.':  # arg - List[OrderPublishing]
+    headings = ['Издат.', 'Автор', 'Название', '#']
+    data = [[publ, ', '.join(bc.book.authors), bc.book.name, bc.count]
+            for orde in arg for publ, bc in
+            zip([orde.publishing] + [''] * (len(orde.books_copies) - 1), orde.books_copies)]
+  elif name_col == 'Заявки в издат.':
+    headings = ['Издат.', 'Автор', 'Название', 'Время', '#']
+    data = [[publ, ', '.join(bc.book.authors), bc.book.name, time, bc.count]
+            for time, orde in arg for publ, bc in
+            zip([orde.publishing] + [''] * (len(orde.books_copies) - 1), orde.books_copies)]
+  elif name_col == 'Топ-10 книг':  # arg - List[Order]
+    top = 10
+    headings = ['Автор', 'Название', 'Рейтинг']
+    sort_arg = sorted(arg, key=lambda bc: bc.book.rating, reverse=True)[:top]
+    data = [[', '.join(bc.book.authors), bc.book.name, f'{bc.book.rating:.2f}'] for bc in sort_arg]
+  else:
+    raise ValueError(f"Unexpected name_col = {name_col}")
+  col_widths = [widths[head] for head in headings]
+  table = sg.Table(values=data, headings=headings,
+                   justification=justification,
+                   num_rows=num_rows,
+                   auto_size_columns=False,
+                   font=DEFAULT_FONT,
+                   col_widths=col_widths)
+  col_assort = [[sg.Text(name_col, justification='c', font=DEFAULT_FONT, size=(sum(col_widths), 1))], [table]]
+  return col_assort
 
 books = [Book(['Михаил Булгаков'], 'Мастер и Маргарита', 'Юнацтва Минск', 1966, 670, 'Художественная лит-ра', 500),
          Book(['Александр Дюма'], 'Граф Монте-Кристо', 'Азбука-Аттикус', 2019, 1300, 'Художественная лит-ра', 600),
@@ -13,7 +57,6 @@ books = [Book(['Михаил Булгаков'], 'Мастер и Маргари
          Book(['Александров Н.В.', 'Яшкин А.Я.'], 'Курс общей физики. Механика', 'Юрайт', 1978, 416, 'Учебная лит-ра', 630),
          Book(['Бьярне Страуструп'], 'Программирование на C++', 'Вильямс', 2018, 1328, 'Учебная лит-ра', 1500), ]
 
-DEFAULT_FONT = ('Arial', 10)
 left_col1 = [
     [sg.Text('Simulation period (days)', font=DEFAULT_FONT), sg.InputText('15', font=DEFAULT_FONT, size=(3, 1))],
     [sg.Text('Simulation step (days)', font=DEFAULT_FONT), sg.InputText('3', font=DEFAULT_FONT, size=(3, 1))],
@@ -37,42 +80,6 @@ layout1 = [headers,
             sg.Column(right_col1, element_justification='r', size=(650, 160), scrollable=True)]]
 
 window1 = sg.Window('Book shop. Input parameters.', layout1)
-def create_col(name_col, arg):
-    global DEFAULT_FONT
-    widths = {'Автор': 40, 'Название': 30, 'Кол-во': 12, 'Покупатель': 20, '#': 2, 'Тематика': 25, 'Издат.': 12,
-              'Рейтинг': 14}
-    num_rows = 7
-    justification = 'l'
-    if name_col == 'Ассортимент':  # arg - List[BookCopies]
-        headings = ['Автор', 'Название', '#']
-        data = [[', '.join(bc.book.authors), bc.book.name, bc.count] for bc in arg]
-    elif name_col == 'Текущие заказы' or name_col == 'Выполн. заказы':  # arg - List[Order]
-        headings = ['Покупатель', 'Автор', 'Название', '#']
-        data = [[orde.customer, '\n'.join([', '.join(bc.book.authors) for bc in orde.cart]),
-                 '\n'.join([bc.book.name for bc in orde.cart]), '\n'.join([str(bc.count) for bc in orde.cart])] for orde in arg]
-    elif name_col == 'Продажи':  # arg - OrderedDict[(category, cnt)]
-        headings = ['Тематика', '#']
-        data = [[cat, cnt] for cat, cnt in arg.items()]
-    elif name_col == 'Выполн. заявки в издат.':  # arg - List[OrderPublishing]
-        headings = ['Издат.', 'Автор', 'Название', '#']
-        data = [[orde.publishing, '\n'.join([', '.join(bc.book.authors) for bc in orde.books_copies]),
-                 '\n'.join([bc.book.name for bc in orde.books_copies]), '\n'.join([str(bc.count) for bc in orde.books_copies])] for orde in arg]
-    elif name_col == 'Топ-10 книг':  # arg - List[Order]
-        #топ - 10 книг: книга, рейтинг, кол - во
-        headings = ['Автор', 'Название', 'Рейтинг', '#']
-        #data =
-    else:
-        raise ValueError(f"Unexpected name_col = {name_col}")
-    col_widths = [widths[head] for head in headings]
-    table = sg.Table(values=data, headings=headings,
-                     justification=justification,
-                     num_rows=num_rows,
-                     auto_size_columns=False,
-                     font=DEFAULT_FONT,
-                     col_widths=col_widths)
-    col_assort = [[sg.Text(name_col, justification='c', font=DEFAULT_FONT, size=(sum(col_widths), 1))], [table]]
-    return col_assort
-
 window = 1
 while True:
     if window == 1:
@@ -92,21 +99,30 @@ while True:
     else:  # i.e. window == 2
         col_assort = create_col('Ассортимент', experiment.book_shop.books)
         col_orders = create_col('Текущие заказы', experiment.book_shop.orders)
-        col_stat = create_col('Продажи', experiment.sell_statistic)
+        col_stat = create_col('Продажи', experiment.sell_statistic_cat)
         col_done_ord_publ = create_col('Выполн. заявки в издат.', experiment.done_orders_publishing)
         col_done_ord = create_col('Выполн. заказы', experiment.done_orders)
-        #col_top10_book = create_col('Топ-10 книг', )
-        layout2 = [[sg.Column(col_assort), sg.Column(col_orders), sg.Column(col_stat)],
-                   [sg.Column(col_done_ord_publ), sg.Column(col_done_ord)],
-                   [sg.Button('Stop', font=DEFAULT_FONT), sg.Button('Exit', font=DEFAULT_FONT)]]
+        col_top10_book = create_col('Топ-10 книг', experiment.book_shop.books)
+        col_ord_publ = create_col('Заявки в издат.', experiment.orders_publishing)
+        layout2 = [[sg.Column(col_assort), sg.Column(col_top10_book)],
+                   [sg.Column(col_orders), sg.Column(col_ord_publ)],
+                   [sg.Column(col_done_ord_publ), sg.Column(col_done_ord), sg.Column(col_stat)],
+                   [sg.Button('One step', font=DEFAULT_FONT), sg.Button('Run', font=DEFAULT_FONT),
+                    sg.Button('Stop', font=DEFAULT_FONT), sg.Button('Exit', font=DEFAULT_FONT)]]
         window2 = sg.Window('Book Shop', layout2)
 
         event, val = window2.read()
-        if event == 'Stop':
+        if event == 'Run':
+          experiment.make_all_steps()
+          window2.hide()
+        elif event == 'One step':
+          experiment.make_step()
+          window2.hide()
+        elif event == 'Stop':
             window = 1
             window2.hide()
             window1.un_hide()
+            del experiment
         elif event == sg.WIN_CLOSED or event == 'Exit':
             break
-
 window1.close()
