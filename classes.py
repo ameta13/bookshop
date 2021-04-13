@@ -201,7 +201,7 @@ class Experiment:
 
     def make_one_step(self):
         cnt_orders = self.randomizer.rand_cnt_order()
-        self.one_day_pass()
+        self.orders_publishing = [(time-1, orde) for time, orde in self.orders_publishing]
         self.create_n_order(cnt_orders)
         self.check_orders_publising()
         self.book_shop.try_complete_orders()
@@ -225,10 +225,6 @@ class Experiment:
     def add_order_publishing(self, order: OrderPublising):
         delivery_time = self.randomizer.rand_delivery_time()
         self.orders_publishing.append((delivery_time, order))
-        return
-
-    def one_day_pass(self):
-        self.orders_publishing = [(time-1, orde) for time, orde in self.orders_publishing]
         return
 
     def check_orders_publising(self):
