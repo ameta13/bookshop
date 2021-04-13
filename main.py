@@ -5,6 +5,7 @@ import random
 MIN_GEN_CNT, MAX_GEN_CNT = 4, 8
 DEFAULT_FONT = ('Arial', 10)
 
+
 def create_col(name_col, arg):
   global DEFAULT_FONT
   widths = {'Автор': 40, 'Название': 30, 'Кол-во': 12, 'Покупатель': 20, '#': 5, 'Тематика': 25, 'Издат.': 12,
@@ -15,7 +16,11 @@ def create_col(name_col, arg):
     headings = ['Автор', 'Название', '#']
     data = [[', '.join(bc.book.authors), bc.book.name, bc.count] for bc in arg]
   elif name_col == 'Текущие заказы' or name_col == 'Выполн. заказы':  # arg - List[Order]
-    headings = ['Покупатель', 'Автор', 'Название', '#']
+    headings = ['Покупатель', 'Автор', 'Название']
+    if name_col == 'Текущие заказы':
+        headings.append('Кол-во')
+    else:
+        headings.append('#')
     data = [[cust, ', '.join(bc.book.authors), bc.book.name, bc.count]
             for orde in arg for cust, bc in zip([orde.customer] + [''] * (len(orde.cart) - 1), orde.cart)]
   elif name_col == 'Продажи':  # arg - OrderedDict[(category, cnt)]
@@ -27,7 +32,7 @@ def create_col(name_col, arg):
             for orde in arg for publ, bc in
             zip([orde.publishing] + [''] * (len(orde.books_copies) - 1), orde.books_copies)]
   elif name_col == 'Заявки в издат.':
-    headings = ['Издат.', 'Автор', 'Название', 'Время', '#']
+    headings = ['Издат.', 'Автор', 'Название', 'Время', 'Кол-во']
     data = [[publ, ', '.join(bc.book.authors), bc.book.name, time, bc.count]
             for time, orde in arg for publ, bc in
             zip([orde.publishing] + [''] * (len(orde.books_copies) - 1), orde.books_copies)]
@@ -48,15 +53,19 @@ def create_col(name_col, arg):
   col_assort = [[sg.Text(name_col, justification='c', font=DEFAULT_FONT, size=(sum(col_widths), 1))], [table]]
   return col_assort
 
-books = [Book(['Михаил Булгаков'], 'Мастер и Маргарита', 'Юнацтва Минск', 1966, 670, 'Художественная лит-ра', 500),
-         Book(['Александр Дюма'], 'Граф Монте-Кристо', 'Азбука-Аттикус', 2019, 1300, 'Художественная лит-ра', 600),
-         Book(['Эрих Мария Ремарк'], 'Время жить и время умирать', 'АСТ', 2020, 384, 'Художественная лит-ра', 300),
-         Book(['Джордж Оруэлл'], '1984', 'АСТ', 2016, 380, 'Художественная лит-ра', 450),
-         Book(['Теодор Драйзер'], 'Американская трагедия', 'АСТ', 2021, 960, 'Художественная лит-ра', 400),
-         Book(['Ильин В.А.', 'Садовничий В.А.', 'Сендов Бл.Х.'], 'Математический анализ', 'Юрайт', 2019, 648, 'Учебная лит-ра', 740),
-         Book(['Александров Н.В.', 'Яшкин А.Я.'], 'Курс общей физики. Механика', 'Юрайт', 1978, 416, 'Учебная лит-ра', 630),
-         Book(['Бьярне Страуструп'], 'Программирование на C++', 'Вильямс', 2018, 1328, 'Учебная лит-ра', 1500), ]
 
+def read_books(path='books.tsv'):
+    # Format:
+    # Авторы\tНазвание\tИздательство\tГод издания\tКоличество страниц\tКатегория\tСтоимость
+    # Авторы -- "Author1; Author2; ..."
+    with open(path, 'r') as f:
+        rows = f.read().split('\n')[1:]
+    rows = [[x if i > 0 else x.split('; ') for i, x in enumerate(r.split('\t'))] for r in rows]
+    books = [Book(r[0], r[1], r[2], int(r[3]), int(r[4]), r[5], int(r[6])) for r in rows]
+    return books
+
+
+books = read_books()
 left_col1 = [
     [sg.Text('Simulation period (days)', font=DEFAULT_FONT), sg.InputText('15', font=DEFAULT_FONT, size=(3, 1))],
     [sg.Text('Simulation step (days)', font=DEFAULT_FONT), sg.InputText('3', font=DEFAULT_FONT, size=(3, 1))],
@@ -104,12 +113,15 @@ while True:
         col_done_ord = create_col('Выполн. заказы', experiment.done_orders)
         col_top10_book = create_col('Топ-10 книг', experiment.book_shop.books)
         col_ord_publ = create_col('Заявки в издат.', experiment.orders_publishing)
+
+        buttons = [sg.Button('Stop', font=DEFAULT_FONT), sg.Button('Exit', font=DEFAULT_FONT)]
+        if experiment.cnt_steps < experiment.simulation_period:
+            buttons = [sg.Button('One step', font=DEFAULT_FONT), sg.Button('Run', font=DEFAULT_FONT)] + buttons
         layout2 = [[sg.Column(col_assort), sg.Column(col_top10_book)],
                    [sg.Column(col_orders), sg.Column(col_ord_publ)],
-                   [sg.Column(col_done_ord_publ), sg.Column(col_done_ord), sg.Column(col_stat)],
-                   [sg.Button('One step', font=DEFAULT_FONT), sg.Button('Run', font=DEFAULT_FONT),
-                    sg.Button('Stop', font=DEFAULT_FONT), sg.Button('Exit', font=DEFAULT_FONT)]]
-        window2 = sg.Window('Book Shop', layout2)
+                   [sg.Column(col_done_ord), sg.Column(col_done_ord_publ), sg.Column(col_stat)],
+                   buttons]
+        window2 = sg.Window(f'Book Shop. Day = {experiment.cnt_steps}', layout2)
 
         event, val = window2.read()
         if event == 'Run':
