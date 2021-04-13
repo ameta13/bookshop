@@ -146,9 +146,6 @@ class BookShop:
                         if book.publishing not in order_publ:
                             order_publ[book.publishing] = defaultdict(int)
                         order_publ[book.publishing][book] += self.minimum_cnt_for_order
-
-                        idx = order.remain_cart.index((i, need_publ))
-                        order.remain_cart[idx] = (i, 0)
                 elif need_publ:
                     if book.publishing not in order_publ:
                         order_publ[book.publishing] = defaultdict(int)
@@ -208,12 +205,12 @@ class Experiment:
         self.create_n_order(cnt_orders)
         self.check_orders_publising()
         self.book_shop.try_complete_orders()
+        self.cnt_steps += 1
         return
 
     def make_step(self):
-        for i in range(self.simulation_step):
+        for _ in range(self.simulation_step):
             self.make_one_step()
-        self.cnt_steps += self.simulation_step
 
     def make_all_steps(self):
         while self.cnt_steps < self.simulation_period:
